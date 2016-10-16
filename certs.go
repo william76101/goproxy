@@ -13,6 +13,12 @@ func init() {
 	if GoproxyCa.Leaf, err = x509.ParseCertificate(GoproxyCa.Certificate[0]); err != nil {
 		panic("Error parsing builtin CA " + err.Error())
 	}
+	if untrustedCaErr != nil {
+		panic("Error parsing builtin CA " + goproxyCaErr.Error())
+	}
+	if UntrustedCa.Leaf, err = x509.ParseCertificate(UntrustedCa.Certificate[0]); err != nil {
+		panic("Error parsing builtin CA " + err.Error())
+	}
 }
 
 var tlsClientSkipVerify = &tls.Config{InsecureSkipVerify: true}
@@ -54,3 +60,4 @@ MJqTIj4uJhte2/uyVvZ6DC6noWYgy+kLgqG0S97tUEG8
 -----END RSA PRIVATE KEY-----`)
 
 var GoproxyCa, goproxyCaErr = tls.X509KeyPair(CA_CERT, CA_KEY)
+var UntrustedCa, untrustedCaErr = tls.X509KeyPair(CA_CERT, CA_KEY)

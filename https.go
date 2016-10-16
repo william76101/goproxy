@@ -29,10 +29,10 @@ const (
 )
 
 var (
-	OkConnect       = &ConnectAction{Action: ConnectAccept, TLSConfig: TLSConfigFromCA(&GoproxyCa)}
-	MitmConnect     = &ConnectAction{Action: ConnectMitm, TLSConfig: TLSConfigFromCA(&GoproxyCa)}
-	HTTPMitmConnect = &ConnectAction{Action: ConnectHTTPMitm, TLSConfig: TLSConfigFromCA(&GoproxyCa)}
-	RejectConnect   = &ConnectAction{Action: ConnectReject, TLSConfig: TLSConfigFromCA(&GoproxyCa)}
+	OkConnect       = &ConnectAction{Action: ConnectAccept, TLSConfig: TLSConfigFromCA(&GoproxyCa, &UntrustedCa)}
+	MitmConnect     = &ConnectAction{Action: ConnectMitm, TLSConfig: TLSConfigFromCA(&GoproxyCa, &UntrustedCa)}
+	HTTPMitmConnect = &ConnectAction{Action: ConnectHTTPMitm, TLSConfig: TLSConfigFromCA(&GoproxyCa, &UntrustedCa)}
+	RejectConnect   = &ConnectAction{Action: ConnectReject, TLSConfig: TLSConfigFromCA(&GoproxyCa, &UntrustedCa)}
 	httpsRegexp     = regexp.MustCompile(`^https:\/\/`)
 )
 
@@ -394,11 +394,25 @@ func (proxy *ProxyHttpServer) NewConnectDialToProxy(https_proxy string) func(net
 	return nil
 }
 
-func TLSConfigFromCA(ca *tls.Certificate) func(host string, ctx *ProxyCtx) (*tls.Config, error) {
+func TLSConfigFromCA(ca *tls.Certificate, untrustedCa *tls.Certificate) func(host string, ctx *ProxyCtx) (*tls.Config, error) {
 	return func(host string, ctx *ProxyCtx) (*tls.Config, error) {
 		config := *defaultTLSConfig
+		conn, err := ctx.proxy.dial("tcp", host)
+		if err != nil {
+			ctx.Warnf("Cannot connect to: %s", host)
+			return nil, err
+		}
+		defer conn.Close()
+		signingCa := ca
+
+		tlsconn := tls.Client(conn, &tls.Config{ServerName: stripPort(host)})
+		err = tlsconn.Handshake()
+		if err != nil {
+			ctx.Warnf("Error while doing TLS handshake %s", err)
+			signingCa = untrustedCa
+		}
 		ctx.Logf("signing for %s", stripPort(host))
-		cert, err := signHost(*ca, []string{stripPort(host)})
+		cert, err := signHost(*signingCa, []string{stripPort(host)})
 		if err != nil {
 			ctx.Warnf("Cannot sign host certificate with provided CA: %s", err)
 			return nil, err
